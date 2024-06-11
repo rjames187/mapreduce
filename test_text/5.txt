@@ -1,0 +1,194 @@
+Counter* uppercase;
+uppercase = GetCounter("uppercase");
+map(String name, String contents):
+for each word w in contents:
+if (IsCapitalized(w)):
+uppercase->Increment();
+EmitIntermediate(w, "1");
+The counter values from individual worker machines
+are periodically propagated to the master (piggybacked
+on the ping response). The master aggregatesthe counter
+values from successful map and reduce tasks and returns
+them to the user code when the MapReduce operation
+is completed. The current counter values are also displayed on the master status page so that a human can
+watch the progress of the live computation. When aggregating counter values, the master eliminates the effects of
+duplicate executions of the same map or reduce task to
+avoid double counting. (Duplicate executions can arise
+from our use of backup tasks and from re-execution of
+tasks due to failures.)
+Some counter values are automatically maintained
+by the MapReduce library, such as the number of input key/value pairs processed and the number of output
+key/value pairs produced.
+Users have found the counter facility useful for sanity checking the behavior of MapReduce operations. For
+example, in some MapReduce operations, the user code
+may want to ensure that the number of output pairs
+produced exactly equals the number of input pairs processed, or that the fraction of German documents processed is within some tolerable fraction of the total number of documents processed.
+5 Performance
+In this section we measure the performance of MapReduce on two computations running on a large cluster of
+machines. One computation searches through approximately one terabyte of data looking for a particular pattern. The other computation sorts approximately one terabyte of data.
+These two programs are representative of a large subset of the real programs written by users of MapReduce –
+one class of programs shuffles data from one representation to another, and another class extracts a small amount
+of interesting data from a large data set.
+5.1 Cluster Configuration
+All of the programs were executed on a cluster that
+consisted of approximately 1800 machines. Each machine had two 2GHz Intel Xeon processors with HyperThreading enabled, 4GB of memory, two 160GB IDE
+20 40 60 80 100
+Seconds
+0
+10000
+20000
+30000
+Input (MB/s)
+Figure 2: Data transfer rate over time
+disks, and a gigabit Ethernet link. The machines were
+arranged in a two-level tree-shaped switched network
+with approximately 100-200 Gbps of aggregate bandwidth available at the root. All of the machines were
+in the same hosting facility and therefore the round-trip
+time between any pair of machines was less than a millisecond.
+Out of the 4GB of memory, approximately 1-1.5GB
+was reserved by other tasks running on the cluster. The
+programs were executed on a weekend afternoon, when
+the CPUs, disks, and network were mostly idle.
+5.2 Grep
+The grep program scans through 1010 100-byte records,
+searching for a relatively rare three-character pattern (the
+pattern occurs in 92,337 records). The input is split into
+approximately 64MB pieces (M = 15000), and the entire output is placed in one file (R = 1).
+Figure 2 shows the progress of the computation over
+time. The Y-axis shows the rate at which the input data is
+scanned. The rate gradually picks up as more machines
+are assigned to this MapReduce computation, and peaks
+at over 30 GB/s when 1764 workers have been assigned.
+As the map tasks finish, the rate starts dropping and hits
+zero about 80 seconds into the computation. The entire
+computation takes approximately 150 seconds from start
+to finish. This includes about a minute of startup overhead. The overhead is due to the propagation of the program to all worker machines, and delays interacting with
+GFS to open the set of 1000 input files and to get the
+information needed for the locality optimization.
+5.3 Sort
+The sort program sorts 1010 100-byte records (approximately 1 terabyte of data). This program is modeled after
+the TeraSort benchmark [10].
+The sorting program consists of less than 50 lines of
+user code. A three-line Map function extracts a 10-byte
+sorting key from a text line and emits the key and the
+To appear in OSDI 2004 8
+500 1000
+0
+5000
+10000
+15000
+20000
+Input (MB/s)
+500 1000
+0
+5000
+10000
+15000
+20000
+Shuffle (MB/s)
+500 1000
+Seconds
+0
+5000
+10000
+15000
+20000
+Output (MB/s)
+Done
+(a) Normal execution
+500 1000
+0
+5000
+10000
+15000
+20000
+Input (MB/s)
+500 1000
+0
+5000
+10000
+15000
+20000
+Shuffle (MB/s)
+500 1000
+Seconds
+0
+5000
+10000
+15000
+20000
+Output (MB/s)
+Done
+(b) No backup tasks
+500 1000
+0
+5000
+10000
+15000
+20000
+Input (MB/s)
+500 1000
+0
+5000
+10000
+15000
+20000
+Shuffle (MB/s)
+500 1000
+Seconds
+0
+5000
+10000
+15000
+20000
+Output (MB/s)
+Done
+(c) 200 tasks killed
+Figure 3: Data transfer rates over time for different executions of the sort program
+original text line as the intermediate key/value pair. We
+used a built-in Identity function as the Reduce operator.
+This functions passes the intermediate key/value pair unchanged as the output key/value pair. The final sorted
+output is written to a set of 2-way replicated GFS files
+(i.e., 2 terabytes are written as the output of the program).
+As before, the input data is split into 64MB pieces
+(M = 15000). We partition the sorted output into 4000
+files (R = 4000). The partitioning function uses the initial bytes of the key to segregate it into one of R pieces.
+Our partitioning function for this benchmark has builtin knowledge of the distribution of keys. In a general
+sorting program, we would add a pre-pass MapReduce
+operation that would collect a sample of the keys and
+use the distribution of the sampled keys to compute splitpoints for the final sorting pass.
+Figure 3 (a) shows the progress of a normal execution
+of the sort program. The top-left graph shows the rate
+at which input is read. The rate peaks at about 13 GB/s
+and dies off fairly quickly since all map tasks finish before 200 seconds have elapsed. Note that the input rate
+is less than for grep. This is because the sort map tasks
+spend about half their time and I/O bandwidth writing intermediate output to their local disks. The corresponding
+intermediate output for grep had negligible size.
+The middle-left graph shows the rate at which data
+is sent over the network from the map tasks to the reduce tasks. This shuffling starts as soon as the first
+map task completes. The first hump in the graph is for
+the first batch of approximately 1700 reduce tasks (the
+entire MapReduce was assigned about 1700 machines,
+and each machine executes at most one reduce task at a
+time). Roughly 300 seconds into the computation, some
+of these first batch of reduce tasks finish and we start
+shuffling data for the remaining reduce tasks. All of the
+shuffling is done about 600 secondsinto the computation.
+The bottom-left graph shows the rate at which sorted
+data is written to the final output files by the reduce tasks.
+There is a delay between the end of the first shuffling period and the start of the writing period because the machines are busy sorting the intermediate data. The writes
+continue at a rate of about 2-4 GB/s for a while. All of
+the writes finish about 850 seconds into the computation.
+Including startup overhead, the entire computation takes
+891 seconds. This is similar to the current best reported
+result of 1057 seconds for the TeraSort benchmark [18].
+A few things to note: the input rate is higher than the
+shuffle rate and the output rate because of our locality
+optimization – most data is read from a local disk and
+bypasses our relatively bandwidth constrained network.
+The shuffle rate is higher than the output rate because
+the output phase writes two copies of the sorted data (we
+make two replicas of the output for reliability and availability reasons). We write two replicas because that is
+the mechanism for reliability and availability provided
+by our underlying file system. Network bandwidth requirements for writing data would be reduced if the underlying file system used erasure coding [14] rather than
+replication.
