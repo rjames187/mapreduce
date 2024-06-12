@@ -14,9 +14,12 @@ func sequentialMapReduce(path string, plugin string) {
 	intermediate_pairs := map[string][]string{}
 
 	// read input files and pass into map function
-	err := filepath.Walk(fmt.Sprintf("./%s", path), func(path string, info fs.FileInfo, err error) error {
+	err := filepath.Walk(path, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
+		}
+		if info.IsDir() {
+			return nil
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -42,6 +45,6 @@ func sequentialMapReduce(path string, plugin string) {
 	// pass intermediate k/v pairs into reduce function
 	for key, val := range intermediate_pairs {
 		res := functions.Reduce(key, val)
-		fmt.Printf("%s: %s", key, res)
+		fmt.Printf("%s: %s\n", key, res)
 	}
 }
