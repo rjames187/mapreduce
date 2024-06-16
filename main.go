@@ -1,6 +1,8 @@
 package main
 
-import "flag"
+import (
+	"flag"
+)
 
 func main() {
 	role := flag.String("r", "", "a role for the node")
@@ -12,6 +14,10 @@ func main() {
 	if *role == "master" {
 		coordinator := NewCoordinator()
 		coordinator.coordinate(*dir, *addr)
+	}
+	if *role == "worker" {
+		worker := NewWorker(*addr)
+		worker.work()
 	}
 	if *role == "sequential" {
 		sequentialMapReduce(*dir, *plugin)

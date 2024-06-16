@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"net/rpc"
 	"path/filepath"
-	"strings"
 	"sync"
+	"time"
 )
 
 type Job struct {
@@ -31,21 +31,25 @@ func (c *Coordinator) coordinate(dir string, addr string) {
 	// listen for messages from workers
 	rpc.Register(c)
 	rpc.HandleHTTP()
-	port := ":" + strings.Split(addr, ":")[1]
-	l, err := net.Listen("tcp", port)
+	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatal("listening error: ", err)
 	}
 	go http.Serve(l, nil)
+	for {
+		duration, _ := time.ParseDuration("1s")
+		time.Sleep(duration)
+	}
 }
 
 // RPC handler for a worker job request
 func (c *Coordinator) RequestJob(args *RequestJobArgs, reply *RequestJobReply) error {
+	log.Print("Received a job request")
 	c.QueueLock.Lock()
 	defer c.QueueLock.Unlock()
 	// pop a job off the queue and send to the worker
 	job := c.JobQueue[0]
-	reply.job = job
+	reply.Job = job
 	c.JobQueue = c.JobQueue[1:]
 	return nil
 }
