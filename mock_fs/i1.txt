@@ -1,0 +1,288 @@
+MapReduce: Simplified Data Processing on Large Clusters
+Jeffrey Dean and Sanjay Ghemawat
+jeff@google.com, sanjay@google.com
+Google, Inc.
+Abstract
+MapReduce is a programming model and an associated implementation for processing and generating large
+data sets. Users specify a map function that processes a
+key/value pair to generate a set of intermediate key/value
+pairs, and a reduce function that merges all intermediate
+values associated with the same intermediate key. Many
+real world tasks are expressible in this model, as shown
+in the paper.
+Programs written in this functional style are automatically parallelized and executed on a large cluster of commodity machines. The run-time system takes care of the
+details of partitioning the input data, scheduling the program’s execution across a set of machines, handling machine failures, and managing the required inter-machine
+communication. This allows programmers without any
+experience with parallel and distributed systems to easily utilize the resources of a large distributed system.
+Our implementation of MapReduce runs on a large
+cluster of commodity machines and is highly scalable:
+a typical MapReduce computation processes many terabytes of data on thousands of machines. Programmers
+find the system easy to use: hundreds of MapReduce programs have been implemented and upwards of one thousand MapReduce jobs are executed on Google’s clusters
+every day.
+1 Introduction
+Over the past five years, the authors and many others at
+Google have implemented hundreds of special-purpose
+computations that process large amounts of raw data,
+such as crawled documents, web request logs, etc., to
+compute various kinds of derived data, such as inverted
+indices, various representations of the graph structure
+of web documents, summaries of the number of pages
+crawled per host, the set of most frequent queries in a
+given day, etc. Most such computations are conceptually straightforward. However, the input data is usually
+large and the computations have to be distributed across
+hundreds or thousands of machines in order to finish in
+a reasonable amount of time. The issues of how to parallelize the computation, distribute the data, and handle
+failures conspire to obscure the original simple computation with large amounts of complex code to deal with
+these issues.
+As a reaction to this complexity, we designed a new
+abstraction that allows us to express the simple computations we were trying to perform but hides the messy details of parallelization, fault-tolerance, data distribution
+and load balancing in a library. Our abstraction is inspired by the map and reduce primitives present in Lisp
+and many other functional languages. We realized that
+most of our computations involved applying a map operation to each logical “record” in our input in order to
+compute a set of intermediate key/value pairs, and then
+applying a reduce operation to all the values that shared
+the same key, in order to combine the derived data appropriately. Our use of a functional model with userspecified map and reduce operations allows us to parallelize large computations easily and to use re-execution
+as the primary mechanism for fault tolerance.
+The major contributions of this work are a simple and
+powerful interface that enables automatic parallelization
+and distribution of large-scale computations, combined
+with an implementation of this interface that achieves
+high performance on large clusters of commodity PCs.
+Section 2 describes the basic programming model and
+gives several examples. Section 3 describes an implementation of the MapReduce interface tailored towards
+our cluster-based computing environment. Section 4 describes several refinements of the programming model
+that we have found useful. Section 5 has performance
+measurements of our implementation for a variety of
+tasks. Section 6 explores the use of MapReduce within
+Google including our experiences in using it as the basis
+To appear in OSDI 2004 1
+for a rewrite of our production indexing system. Section 7 discusses related and future work.
+2 Programming Model
+The computation takes a set of input key/value pairs, and
+produces a set of output key/value pairs. The user of
+the MapReduce library expresses the computation as two
+functions: Map and Reduce.
+Map, written by the user, takes an input pair and produces a set of intermediate key/value pairs. The MapReduce library groups together all intermediate values associated with the same intermediate key I and passes them
+to the Reduce function.
+The Reduce function, also written by the user, accepts
+an intermediate key I and a set of values for that key. It
+merges together these values to form a possibly smaller
+set of values. Typically just zero or one output value is
+produced per Reduce invocation. The intermediate values are supplied to the user’s reduce function via an iterator. This allows us to handle lists of values that are too
+large to fit in memory.
+2.1 Example
+Consider the problem of counting the number of occurrences of each word in a large collection of documents. The user would write code similar to the following pseudo-code:
+map(String key, String value):
+// key: document name
+// value: document contents
+for each word w in value:
+EmitIntermediate(w, "1");
+reduce(String key, Iterator values):
+// key: a word
+// values: a list of counts
+int result = 0;
+for each v in values:
+result += ParseInt(v);
+Emit(AsString(result));
+The map function emits each word plus an associated
+count of occurrences (just ‘1’ in this simple example).
+The reduce function sums together all counts emitted
+for a particular word.
+In addition, the user writes code to fill in a mapreduce
+specification object with the names of the input and output files, and optional tuning parameters. The user then
+invokes the MapReduce function, passing it the specification object. The user’s code is linked together with the
+MapReduce library (implemented in C++). Appendix A
+contains the full program text for this example.
+2.2 Types
+Even though the previous pseudo-code is written in terms
+of string inputs and outputs, conceptually the map and
+reduce functions supplied by the user have associated
+types:
+map (k1,v1) → list(k2,v2)
+reduce (k2,list(v2)) → list(v2)
+I.e., the input keys and values are drawn from a different
+domain than the output keys and values. Furthermore,
+the intermediate keys and values are from the same domain as the output keys and values.
+Our C++ implementation passes strings to and from
+the user-defined functions and leaves it to the user code
+to convert between strings and appropriate types.
+2.3 More Examples
+Here are a few simple examples of interesting programs
+that can be easily expressed as MapReduce computations.
+Distributed Grep: The map function emits a line if it
+matches a supplied pattern. The reduce function is an
+identity function that just copies the supplied intermediate data to the output.
+Count of URL Access Frequency: The map function processes logs of web page requests and outputs
+hURL, 1i. The reduce function adds together all values
+for the same URL and emits a hURL, total counti
+pair.
+Reverse Web-Link Graph: The map function outputs
+htarget, sourcei pairs for each link to a target
+URL found in a page named source. The reduce
+function concatenates the list of all source URLs associated with a given target URL and emits the pair:
+htarget, list(source)i
+Term-Vector per Host: A term vector summarizes the
+most important words that occur in a document or a set
+of documents as a list of hword, frequencyi pairs. The
+map function emits a hhostname, term vectori
+pair for each input document (where the hostname is
+extracted from the URL of the document). The reduce function is passed all per-document term vectors
+for a given host. It adds these term vectors together,
+throwing away infrequent terms, and then emits a final
+hhostname, term vectori pair.
+To appear in OSDI 2004 2
+User
+Program
+Master
+(1) fork
+worker
+(1) fork
+worker
+(1) fork
+(2)
+assign
+map
+(2)
+assign
+reduce
+split 0
+split 1
+split 2
+split 3
+split 4
+output
+file 0
+
+(6) write
+worker
+(3) read
+worker
+(4) local write
+Map
+phase
+Intermediate files
+(on local disks)
+worker output
+file 1
+Input
+files
+(5) remote read
+Reduce
+phase
+Output
+files
+Figure 1: Execution overview
+Inverted Index: The map function parses each document, and emits a sequence of hword, document IDi
+pairs. The reduce function accepts all pairs for a given
+word, sorts the corresponding document IDs and emits a
+hword, list(document ID)i pair. The set of all output
+pairs forms a simple inverted index. It is easy to augment
+this computation to keep track of word positions.
+Distributed Sort: The map function extracts the key
+from each record, and emits a hkey, recordi pair. The
+reduce function emits all pairs unchanged. This computation depends on the partitioning facilities described in
+Section 4.1 and the ordering properties described in Section 4.2.
+3 Implementation
+Many different implementations of the MapReduce interface are possible. The right choice depends on the
+environment. For example, one implementation may be
+suitable for a small shared-memory machine, another for
+a large NUMA multi-processor, and yet another for an
+even larger collection of networked machines.
+This section describes an implementation targeted
+to the computing environment in wide use at Google:
+large clusters of commodity PCs connected together with
+switched Ethernet [4]. In our environment:
+(1) Machines are typically dual-processor x86 processors
+running Linux, with 2-4 GB of memory per machine.
+(2) Commodity networking hardware is used – typically
+either 100 megabits/second or 1 gigabit/second at the
+machine level, but averaging considerably less in overall bisection bandwidth.
+(3) A cluster consists of hundreds or thousands of machines, and therefore machine failures are common.
+(4) Storage is provided by inexpensive IDE disks attached directly to individual machines. A distributed file
+system [8] developed in-house is used to manage the data
+stored on these disks. The file system uses replication to
+provide availability and reliability on top of unreliable
+hardware.
+(5) Users submit jobs to a scheduling system. Each job
+consists of a set of tasks, and is mapped by the scheduler
+to a set of available machines within a cluster.
+3.1 Execution Overview
+The Map invocations are distributed across multiple
+machines by automatically partitioning the input data
+To appear in OSDI 2004 3
+into a set of M splits. The input splits can be processed in parallel by different machines. Reduce invocations are distributed by partitioning the intermediate key
+space into R pieces using a partitioning function (e.g.,
+hash(key) mod R). The number of partitions (R) and
+the partitioning function are specified by the user.
+Figure 1 shows the overall flow of a MapReduce operation in our implementation. When the user program
+calls the MapReduce function, the following sequence
+of actions occurs (the numbered labels in Figure 1 correspond to the numbers in the list below):
+1. The MapReduce library in the user program first
+splits the input files into M pieces of typically 16
+megabytes to 64 megabytes (MB) per piece (controllable by the user via an optional parameter). It
+then starts up many copies of the program on a cluster of machines.
+2. One of the copies of the program is special – the
+master. The rest are workers that are assigned work
+by the master. There are M map tasks and R reduce
+tasks to assign. The master picks idle workers and
+assigns each one a map task or a reduce task.
+3. A worker who is assigned a map task reads the
+contents of the corresponding input split. It parses
+key/value pairs out of the input data and passes each
+pair to the user-defined Map function. The intermediate key/value pairs produced by the Map function
+are buffered in memory.
+4. Periodically, the buffered pairs are written to local
+disk, partitioned into R regions by the partitioning
+function. The locations of these buffered pairs on
+the local disk are passed back to the master, who
+is responsible for forwarding these locations to the
+reduce workers.
+5. When a reduce worker is notified by the master
+about these locations, it uses remote procedure calls
+to read the buffered data from the local disks of the
+map workers. When a reduce worker has read all intermediate data, it sorts it by the intermediate keys
+so that all occurrences of the same key are grouped
+together. The sorting is needed because typically
+many different keys map to the same reduce task. If
+the amount of intermediate data is too large to fit in
+memory, an external sort is used.
+6. The reduce worker iterates over the sorted intermediate data and for each unique intermediate key encountered, it passes the key and the corresponding
+set of intermediate values to the user’s Reduce function. The output of the Reduce function is appended
+to a final output file for this reduce partition.
+7. When all map tasks and reduce tasks have been
+completed, the master wakes up the user program.
+At this point, the MapReduce call in the user program returns back to the user code.
+After successful completion, the output of the mapreduce execution is available in the R output files (one per
+reduce task, with file names as specified by the user).
+Typically, users do not need to combine these R output
+files into one file – they often pass these files as input to
+another MapReduce call, or use them from another distributed application that is able to deal with input that is
+partitioned into multiple files.
+3.2 Master Data Structures
+The master keeps several data structures. For each map
+task and reduce task, it stores the state (idle, in-progress,
+or completed), and the identity of the worker machine
+(for non-idle tasks).
+The master is the conduit through which the location
+of intermediate file regions is propagated from map tasks
+to reduce tasks. Therefore, for each completed map task,
+the master stores the locations and sizes of the R intermediate file regions produced by the map task. Updates
+to this location and size information are received as map
+tasks are completed. The information is pushed incrementally to workers that have in-progress reduce tasks.
+3.3 Fault Tolerance
+Since the MapReduce library is designed to help process
+very large amounts of data using hundreds or thousands
+of machines, the library must tolerate machine failures
+gracefully.
+Worker Failure
+The master pings every worker periodically. If no response is received from a worker in a certain amount of
+time, the master marks the worker as failed. Any map
+tasks completed by the worker are reset back to their initial idle state, and therefore become eligible for scheduling on other workers. Similarly, any map task or reduce
+task in progress on a failed worker is also reset to idle
+and becomes eligible for rescheduling.
+Completed map tasks are re-executed on a failure because their output is stored on the local disk(s) of the
+failed machine and is therefore inaccessible. Completed
+reduce tasks do not need to be re-executed since their
+output is stored in a global file system.
+When a map task is executed first by worker A and
+then later executed by worker B (because A failed), all
