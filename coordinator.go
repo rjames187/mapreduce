@@ -3,7 +3,12 @@ package main
 import (
 	"io/fs"
 	"log"
+	"net"
+	"net/http"
+	"net/rpc"
 	"path/filepath"
+	"strings"
+	"sync"
 )
 
 type Job struct {
@@ -12,12 +17,41 @@ type Job struct {
 	State    string
 }
 
-func coordinate(dir string, addr string) {
-	jobQueue := initMapJobs(dir)
-	log.Print(jobQueue)
+type Coordinator struct {
+	JobQueue []*Job
+	QueueLock *sync.Mutex
+	TakenJobs map[string]*Job
 }
 
-func initMapJobs(dir string) []*Job {
+func (c *Coordinator) coordinate(dir string, addr string) {
+	// initialize a FIFO queue of Map jobs
+	c.initMapJobs(dir)
+	log.Printf("%d Map jobs waiting for workers", len(c.JobQueue))
+
+	// listen for messages from workers
+	rpc.Register(c)
+	rpc.HandleHTTP()
+	port := ":" + strings.Split(addr, ":")[1]
+	l, err := net.Listen("tcp", port)
+	if err != nil {
+		log.Fatal("listening error: ", err)
+	}
+	go http.Serve(l, nil)
+}
+
+// RPC handler for a worker job request
+func (c *Coordinator) RequestJob(args *RequestJobArgs, reply *RequestJobReply) error {
+	c.QueueLock.Lock()
+	defer c.QueueLock.Unlock()
+	// pop a job off the queue and send to the worker
+	job := c.JobQueue[0]
+	reply.job = job
+	c.JobQueue = c.JobQueue[1:]
+	return nil
+}
+
+// create the initial map jobs by building a list of all input files
+func (c *Coordinator) initMapJobs(dir string) {
 	queue := []*Job{}
 	err := filepath.Walk(dir, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
@@ -37,5 +71,13 @@ func initMapJobs(dir string) []*Job {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return queue
+	c.JobQueue = queue
+}
+
+// instantiate a new coordinator
+func NewCoordinator() *Coordinator {
+	return &Coordinator{
+		TakenJobs: map[string]*Job{},
+		QueueLock: &sync.Mutex{},
+	}
 }

@@ -10,7 +10,8 @@ func main() {
 
 	flag.Parse()
 	if *role == "master" {
-		coordinate(*dir, *addr)
+		coordinator := NewCoordinator()
+		coordinator.coordinate(*dir, *addr)
 	}
 	if *role == "sequential" {
 		sequentialMapReduce(*dir, *plugin)
