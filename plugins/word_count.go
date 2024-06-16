@@ -7,20 +7,22 @@ import (
 
 type WordCount struct{}
 
-func (wc WordCount) Map(input string) [][]string {
-	res := [][]string{}
+func (wc WordCount) Map(input string) []*KeyValue {
+	res := []*KeyValue{}
 	for _, word := range strings.Fields(input) {
-		pair := []string{word, "1"}
-		res = append(res, pair)
+		pair := KeyValue{word, "1"}
+		res = append(res, &pair)
 	}
 	return res
 }
 
-func (wc WordCount) Reduce(key string, values []string) []string {
+func (wc WordCount) Reduce(pairs []*KeyValue) []*KeyValue {
+	// all pairs in a reduce call have the same key
+	key := pairs[0].Key
 	res := 0
-	for _, v := range values {
-		value, _ := strconv.Atoi(v)
-		res += value
+	for _, p := range pairs {
+		count, _ := strconv.Atoi(p.Value)
+		res += count
 	}
-	return []string{strconv.Itoa(res)}
+	return []*KeyValue{&KeyValue{key, strconv.Itoa(res)}}
 }

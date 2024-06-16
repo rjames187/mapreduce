@@ -1,5 +1,5 @@
 seq_wc: build
-	./mapreduce -r sequential -d ./test_text/ -p wc > seq_wc.txt
+	./mapreduce -r sequential -d ./mock_fs/ -p wc > seq_wc.txt
 
 build: 
 	go build

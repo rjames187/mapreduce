@@ -7,16 +7,20 @@ import (
 	"mapreduce/plugins"
 	"os"
 	"path/filepath"
+	"sort"
 )
 
 func sequentialMapReduce(path string, plugin string) {
 	functions := plugins.Plugins[plugin]
-	intermediate_pairs := map[string][]string{}
+	intermediate_pairs := map[string][]*plugins.KeyValue{}
 
 	// read input files and pass into map function
 	err := filepath.Walk(path, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
+		}
+		if info.Name()[0] != 'i' {
+			return nil
 		}
 		if info.IsDir() {
 			return nil
@@ -27,13 +31,13 @@ func sequentialMapReduce(path string, plugin string) {
 		}
 		pairs := functions.Map(string(data))
 		for _, pair := range pairs {
-			key := pair[0]
-			val := pair[1]
+			key := pair.Key
+			val := pair.Value
 			group, ok := intermediate_pairs[key]
 			if !ok {
-				intermediate_pairs[key] = []string{val}
+				intermediate_pairs[key] = []*plugins.KeyValue{{Key: key, Value: val,}}
 			} else {
-				intermediate_pairs[key] = append(group, val)
+				intermediate_pairs[key] = append(group, &plugins.KeyValue{Key: key, Value: val,})
 			}
 		}
 		return nil
@@ -43,8 +47,17 @@ func sequentialMapReduce(path string, plugin string) {
 	}
 
 	// pass intermediate k/v pairs into reduce function
-	for key, val := range intermediate_pairs {
-		res := functions.Reduce(key, val)
-		fmt.Printf("%s: %s\n", key, res)
+	final_pairs := []*plugins.KeyValue{}
+	for _, group := range intermediate_pairs {
+		res := functions.Reduce(group)
+		final_pairs = append(final_pairs, res...)
+	}
+
+	sort.Slice(final_pairs, func(i, j int) bool {
+		return final_pairs[i].Key < final_pairs[j].Key
+	})
+
+	for _, p := range final_pairs {
+		fmt.Printf("%v: %v\n", p.Key, p.Value)
 	}
 }
