@@ -5,8 +5,7 @@ type KeyValue struct {
 	Value string
 }
 
-// a plugin is a set of an arbitrary map and reduce function
-
+// a pair of arbitrary map and reduce functions
 type Plugin interface {
 	Map(string) []*KeyValue
 	Reduce([]*KeyValue) []*KeyValue

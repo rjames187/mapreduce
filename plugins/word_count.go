@@ -24,5 +24,5 @@ func (wc WordCount) Reduce(pairs []*KeyValue) []*KeyValue {
 		count, _ := strconv.Atoi(p.Value)
 		res += count
 	}
-	return []*KeyValue{&KeyValue{key, strconv.Itoa(res)}}
+	return []*KeyValue{{key, strconv.Itoa(res)}}
 }
