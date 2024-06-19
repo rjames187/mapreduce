@@ -7,3 +7,4 @@ build:
 clean:
 	rm mapreduce.exe
 	rm seq_wc.txt
+	rm ./mock_fs/m*.txt

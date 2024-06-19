@@ -12,11 +12,11 @@ func main() {
 
 	flag.Parse()
 	if *role == "master" {
-		coordinator := NewCoordinator()
+		coordinator := NewCoordinator(2)
 		coordinator.coordinate(*dir, *addr)
 	}
 	if *role == "worker" {
-		worker := NewWorker(*addr)
+		worker := NewWorker(*addr, *plugin)
 		worker.work()
 	}
 	if *role == "sequential" {

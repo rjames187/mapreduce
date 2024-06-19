@@ -15,12 +15,15 @@ type Job struct {
 	Type     string
 	FilePath string
 	State    string
+	Num int
+	NReduce int
 }
 
 type Coordinator struct {
 	JobQueue []*Job
 	QueueLock *sync.Mutex
 	TakenJobs map[string]*Job
+	NReduce int
 }
 
 func (c *Coordinator) coordinate(dir string, addr string) {
@@ -57,6 +60,7 @@ func (c *Coordinator) RequestJob(args *RequestJobArgs, reply *RequestJobReply) e
 // create the initial map jobs by building a list of all input files
 func (c *Coordinator) initMapJobs(dir string) {
 	queue := []*Job{}
+	numJob := 1
 	err := filepath.Walk(dir, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -68,8 +72,11 @@ func (c *Coordinator) initMapJobs(dir string) {
 			Type: "map",
 			FilePath: path,
 			State: "queued",
+			Num: numJob,
+			NReduce: c.NReduce,
 		}
 		queue = append(queue, job)
+		numJob += 1
 		return nil
 	})
 	if err != nil {
@@ -79,9 +86,10 @@ func (c *Coordinator) initMapJobs(dir string) {
 }
 
 // instantiate a new coordinator
-func NewCoordinator() *Coordinator {
+func NewCoordinator(nReduce int) *Coordinator {
 	return &Coordinator{
 		TakenJobs: map[string]*Job{},
 		QueueLock: &sync.Mutex{},
+		NReduce: nReduce,
 	}
 }
