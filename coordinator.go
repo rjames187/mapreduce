@@ -15,14 +15,16 @@ type Job struct {
 	Type     string
 	FilePaths []string
 	State    string
-	Num int
+	Id int
 	NReduce int
 }
 
 type Coordinator struct {
 	JobQueue []*Job
 	QueueLock *sync.Mutex
-	TakenJobs map[string]*Job
+	InProgressLock *sync.Mutex
+	TakenJobs map[int]*Job
+	ReduceFilePaths map[int][]string
 	NReduce int
 }
 
@@ -57,6 +59,24 @@ func (c *Coordinator) RequestJob(args *RequestJobArgs, reply *RequestJobReply) e
 	return nil
 }
 
+// RPC handler for complete map job 
+func (c *Coordinator) CompleteMapJob(args *CompleteMapJobArgs, reply *CompleteMapJobReply) error {
+	log.Println("Received complete map job call")
+	c.InProgressLock.Lock()
+	defer c.InProgressLock.Unlock()
+	delete(c.TakenJobs, args.Id)
+	for id, newPaths := range args.FilePaths {
+		paths, present := c.ReduceFilePaths[id]
+		if present {
+			c.ReduceFilePaths[id] = append(paths, newPaths...)
+		} else {
+			c.ReduceFilePaths[id] = newPaths
+		}
+	}
+	log.Println(c.ReduceFilePaths)
+	return nil
+}
+
 // create the initial map jobs by building a list of all input files
 func (c *Coordinator) initMapJobs(dir string) {
 	queue := []*Job{}
@@ -72,9 +92,10 @@ func (c *Coordinator) initMapJobs(dir string) {
 			Type: "map",
 			FilePaths: []string{path},
 			State: "queued",
-			Num: numJob,
+			Id: numJob,
 			NReduce: c.NReduce,
 		}
+		c.TakenJobs[numJob] = job
 		queue = append(queue, job)
 		numJob += 1
 		return nil
@@ -88,8 +109,10 @@ func (c *Coordinator) initMapJobs(dir string) {
 // instantiate a new coordinator
 func NewCoordinator(nReduce int) *Coordinator {
 	return &Coordinator{
-		TakenJobs: map[string]*Job{},
+		TakenJobs: map[int]*Job{},
 		QueueLock: &sync.Mutex{},
+		InProgressLock: &sync.Mutex{},
+		ReduceFilePaths: map[int][]string{},
 		NReduce: nReduce,
 	}
 }

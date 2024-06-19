@@ -41,6 +41,17 @@ func (w *Worker) CallRequestJob() {
 	}
 }
 
+func (w *Worker) CallCompleteMapJob(id int, filePaths map[int][]string) {
+	args := CompleteMapJobArgs{Id: id}
+	reply := CompleteMapJobReply{}
+	ok := w.call("Coordinator.CompleteMapJob", &args, &reply)
+	if ok {
+		log.Printf("Worker successfully sent completion notice of map job #%d", id)
+	} else {
+		log.Fatal("Worker failed to send completion notice of map job")
+	}
+}
+
 func (w *Worker) call(rpcName string, args interface{}, reply interface{}) bool {
 	c, err := rpc.DialHTTP("tcp", w.masterAddr)
 	if err != nil {
@@ -64,8 +75,15 @@ func (w *Worker) doTask(job *Job) {
 		}
 		pairs := w.plugin.Map(string(data))
 		partitions := w.partitionIntermediate(pairs, job.NReduce)
+		filePaths := map[int][]string{}
 		for p, part := range partitions {
-			intFilePath := fmt.Sprintf("./mock_fs/m%d-%d.txt", job.Num, p)
+			intFilePath := fmt.Sprintf("./mock_fs/m%d-%d.txt", job.Id, p)
+			_, present := filePaths[p]
+			if present {
+				filePaths[p] = append(filePaths[p], intFilePath)
+			} else {
+				filePaths[p] = []string{intFilePath}
+			}
 			f, err := os.Create(intFilePath)
 			if err != nil {
 				log.Fatal("error creating new file: ", err)
@@ -76,6 +94,7 @@ func (w *Worker) doTask(job *Job) {
 				log.Fatal("error encoding intermediate pairs: ", err)
 			}
 		}
+		w.CallCompleteMapJob(job.Id, filePaths)
 	} else if job.Type == "reduce" {
 		intermediate_pairs := []*plugins.KeyValue{}
 		for _, fp := range job.FilePaths {
@@ -91,7 +110,7 @@ func (w *Worker) doTask(job *Job) {
 			intermediate_pairs = append(intermediate_pairs, part_pairs...)
 		}
 		final_pairs := w.plugin.Reduce(intermediate_pairs)
-		f, err := os.Create(fmt.Sprintf("./mock_fs/o%d.txt", job.Num))
+		f, err := os.Create(fmt.Sprintf("./mock_fs/o%d.txt", job.Id))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -99,7 +118,7 @@ func (w *Worker) doTask(job *Job) {
 		for _, pair := range final_pairs {
 			f.Write([]byte(fmt.Sprintf("%v: %v\n", pair.Key, pair.Value)))
 		}
-		fmt.Printf("Reduce task #%d completed ...", job.Num)
+		fmt.Printf("Reduce task #%d completed ...", job.Id)
 	}
 }
 
