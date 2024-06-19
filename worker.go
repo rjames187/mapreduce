@@ -8,6 +8,7 @@ import (
 	"mapreduce/plugins"
 	"net/rpc"
 	"os"
+	"time"
 )
 
 type Worker struct {
@@ -16,7 +17,9 @@ type Worker struct {
 }
 
 func (w *Worker) work() {
-	w.CallRequestJob()
+	for {
+		w.CallRequestJob()
+	}
 }
 
 func (w *Worker) CallRequestJob() {
@@ -24,6 +27,12 @@ func (w *Worker) CallRequestJob() {
 	reply := RequestJobReply{}
 	ok := w.call("Coordinator.RequestJob", &args, &reply)
 	if ok {
+		// an empty job is a signal to wait
+		if reply.Job == nil {
+			duration, _ := time.ParseDuration("1s")
+			time.Sleep(duration)
+			return
+		}
 		fmt.Printf("Received a job: %v\n", *reply.Job)
 		w.doTask(reply.Job)
 	} else {
@@ -49,7 +58,7 @@ func (w *Worker) call(rpcName string, args interface{}, reply interface{}) bool 
 
 func (w *Worker) doTask(job *Job) {
 	if job.Type == "map" {
-		data, err := os.ReadFile(job.FilePath)
+		data, err := os.ReadFile(job.FilePaths[0])
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -67,6 +76,30 @@ func (w *Worker) doTask(job *Job) {
 				log.Fatal("error encoding intermediate pairs: ", err)
 			}
 		}
+	} else if job.Type == "reduce" {
+		intermediate_pairs := []*plugins.KeyValue{}
+		for _, fp := range job.FilePaths {
+			f, err := os.Open(fp)
+			if err != nil {
+				log.Fatal(err)
+			}
+			part_pairs := []*plugins.KeyValue{}
+			err = json.NewDecoder(f).Decode(&part_pairs)
+			if err != nil {
+				log.Fatal(err)
+			}
+			intermediate_pairs = append(intermediate_pairs, part_pairs...)
+		}
+		final_pairs := w.plugin.Reduce(intermediate_pairs)
+		f, err := os.Create(fmt.Sprintf("./mock_fs/o%d.txt", job.Num))
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+		for _, pair := range final_pairs {
+			f.Write([]byte(fmt.Sprintf("%v: %v\n", pair.Key, pair.Value)))
+		}
+		fmt.Printf("Reduce task #%d completed ...", job.Num)
 	}
 }
 

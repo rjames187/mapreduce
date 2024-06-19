@@ -13,7 +13,7 @@ import (
 
 type Job struct {
 	Type     string
-	FilePath string
+	FilePaths []string
 	State    string
 	Num int
 	NReduce int
@@ -70,7 +70,7 @@ func (c *Coordinator) initMapJobs(dir string) {
 		}
 		job := &Job{
 			Type: "map",
-			FilePath: path,
+			FilePaths: []string{path},
 			State: "queued",
 			Num: numJob,
 			NReduce: c.NReduce,
