@@ -42,7 +42,7 @@ func (w *Worker) CallRequestJob() {
 }
 
 func (w *Worker) CallCompleteMapJob(id int, filePaths map[int][]string) {
-	args := CompleteMapJobArgs{Id: id}
+	args := CompleteMapJobArgs{Id: id, FilePaths: filePaths}
 	reply := CompleteMapJobReply{}
 	ok := w.call("Coordinator.CompleteMapJob", &args, &reply)
 	if ok {

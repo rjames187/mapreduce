@@ -44,6 +44,12 @@ func (c *Coordinator) coordinate(dir string, addr string) {
 	for {
 		duration, _ := time.ParseDuration("1s")
 		time.Sleep(duration)
+		c.InProgressLock.Lock()
+		if len(c.TakenJobs) == 0 {
+			log.Println("All map jobs completed ...")
+			break
+		}
+		c.InProgressLock.Unlock()
 	}
 }
 
@@ -52,6 +58,11 @@ func (c *Coordinator) RequestJob(args *RequestJobArgs, reply *RequestJobReply) e
 	log.Print("Received a job request")
 	c.QueueLock.Lock()
 	defer c.QueueLock.Unlock()
+	if len(c.JobQueue) == 0 {
+		// if no jobs are queued, send signal to wait
+		reply.Job = nil
+		return nil
+	}
 	// pop a job off the queue and send to the worker
 	job := c.JobQueue[0]
 	reply.Job = job
