@@ -52,6 +52,17 @@ func (w *Worker) CallCompleteMapJob(id int, filePaths map[int][]string) {
 	}
 }
 
+func (w *Worker) CallCompleteReduceJob(id int) {
+	args := CompleteReduceJobArgs{Id: id}
+	reply := CompleteReduceJobReply{}
+	ok := w.call("Coordinator.CompleteReduceJob", &args, &reply)
+	if ok {
+		log.Printf("Worker successfully sent completion notice of reduce job #%d", id)
+	} else {
+		log.Fatal("Worker failed to send completion notice of reduce job")
+	}
+}
+
 func (w *Worker) call(rpcName string, args interface{}, reply interface{}) bool {
 	c, err := rpc.DialHTTP("tcp", w.masterAddr)
 	if err != nil {
@@ -119,6 +130,7 @@ func (w *Worker) doTask(job *Job) {
 			f.Write([]byte(fmt.Sprintf("%v: %v\n", pair.Key, pair.Value)))
 		}
 		fmt.Printf("Reduce task #%d completed ...", job.Id)
+		w.CallCompleteReduceJob(job.Id)
 	}
 }
 

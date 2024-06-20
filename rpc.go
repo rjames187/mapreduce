@@ -12,3 +12,9 @@ type CompleteMapJobArgs struct {
 }
 
 type CompleteMapJobReply struct{}
+
+type CompleteReduceJobArgs struct {
+	Id int
+}
+
+type CompleteReduceJobReply struct{}

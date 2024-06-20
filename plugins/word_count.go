@@ -17,12 +17,20 @@ func (wc WordCount) Map(input string) []*KeyValue {
 }
 
 func (wc WordCount) Reduce(pairs []*KeyValue) []*KeyValue {
-	// all pairs in a reduce call have the same key
-	key := pairs[0].Key
-	res := 0
+	counter := map[string]*KeyValue{}
 	for _, p := range pairs {
 		count, _ := strconv.Atoi(p.Value)
-		res += count
+		_, present := counter[p.Key]
+		if present {
+			oldCount, _ := strconv.Atoi(counter[p.Key].Value)
+			counter[p.Key].Value = strconv.Itoa(count + oldCount)
+		} else {
+			counter[p.Key] = &KeyValue{Key: p.Key, Value: strconv.Itoa(count)}
+		}
 	}
-	return []*KeyValue{{key, strconv.Itoa(res)}}
+	res := []*KeyValue{}
+	for _, kv := range counter {
+		res = append(res, kv)
+	}
+	return res
 }

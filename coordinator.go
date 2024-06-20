@@ -47,6 +47,7 @@ func (c *Coordinator) coordinate(dir string, addr string) {
 		c.mu.Lock()
 		if len(c.TakenJobs) == 0 {
 			log.Println("All map jobs completed ...")
+			c.mu.Unlock()
 			break
 		}
 		c.mu.Unlock()
@@ -100,6 +101,15 @@ func (c *Coordinator) CompleteMapJob(args *CompleteMapJobArgs, reply *CompleteMa
 		}
 	}
 	log.Println(c.ReduceFilePaths)
+	return nil
+}
+
+// RPC handler for complete reduce job
+func (c *Coordinator) CompleteReduceJob(args *CompleteReduceJobArgs, reply *CompleteReduceJobReply) error {
+	log.Println("Received complete reduce job call")
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.TakenJobs, args.Id)
 	return nil
 }
 
