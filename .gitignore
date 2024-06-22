@@ -1,4 +1,6 @@
 mapreduce.exe
-seq_wc.txt
+mock_fs/seq*.txt
+mock_fs/seq*int.txt
 mock_fs/m*.txt
 mock_fs/o*.txt
+mock_fs/all.txt

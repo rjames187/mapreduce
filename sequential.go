@@ -7,7 +7,6 @@ import (
 	"mapreduce/plugins"
 	"os"
 	"path/filepath"
-	"sort"
 )
 
 func sequentialMapReduce(path string, plugin string) {
@@ -38,10 +37,6 @@ func sequentialMapReduce(path string, plugin string) {
 
 	// pass intermediate k/v pairs into reduce function
 	finalPairs := functions.Reduce(intermediatePairs)
-
-	sort.Slice(finalPairs, func(i, j int) bool {
-		return finalPairs[i].Key < finalPairs[j].Key
-	})
 
 	for _, p := range finalPairs {
 		fmt.Printf("%v: %v\n", p.Key, p.Value)
