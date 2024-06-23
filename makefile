@@ -10,10 +10,10 @@ build:
 	go build
 
 clean:
-	rm mapreduce.exe &
-	rm seq_wc.txt &
-	rm ./mock_fs/m*.txt &
-	rm ./mock_fs/o*.txt &
-	rm ./mock_fs/seq*.txt &
-	rm ./mock_fs/seq*int.txt &
-	rm ./mock_fs/all.txt
+	rm -f mapreduce.exe &
+	rm -f seq_wc.txt &
+	rm -f ./mock_fs/m*.txt &
+	rm -f ./mock_fs/o*.txt &
+	rm -f ./mock_fs/seq*.txt &
+	rm -f ./mock_fs/seq*int.txt &
+	rm -f ./mock_fs/all.txt
