@@ -83,6 +83,7 @@ func (c *Coordinator) RequestJob(args *RequestJobArgs, reply *RequestJobReply) e
 	job := c.JobQueue[0]
 	reply.Job = job
 	c.JobQueue = c.JobQueue[1:]
+	go c.timeout(job)
 	return nil
 }
 
@@ -111,6 +112,22 @@ func (c *Coordinator) CompleteReduceJob(args *CompleteReduceJobArgs, reply *Comp
 	defer c.mu.Unlock()
 	delete(c.TakenJobs, args.Id)
 	return nil
+}
+
+// procedure that executes upon a job timeout
+func (c *Coordinator) timeout(job *Job) {
+	time.Sleep(time.Duration(10) * time.Second)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	storedJob, ok := c.TakenJobs[job.Id]
+	if !ok {
+		return
+	}
+	if storedJob.Type != job.Type {
+		return
+	}
+	delete(c.TakenJobs, job.Id)
+	c.JobQueue = append(c.JobQueue, job)
 }
 
 // create the initial map jobs by building a list of all input files
