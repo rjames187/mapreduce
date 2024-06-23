@@ -6,6 +6,7 @@ sleep 1
 ./mapreduce -r worker -a 127.0.0.1:12345 -p c
 ./mapreduce -r worker -a 127.0.0.1:12345 -p c
 # continuously create workers in case all crash
+# stop after the 'done' file is created
 while [ ! -f done ]
 do
   echo 'new worker created!'

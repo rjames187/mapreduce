@@ -17,3 +17,4 @@ clean:
 	rm -f ./mock_fs/seq*.txt &
 	rm -f ./mock_fs/seq*int.txt &
 	rm -f ./mock_fs/all.txt
+	rm -f done

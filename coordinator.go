@@ -92,6 +92,11 @@ func (c *Coordinator) CompleteMapJob(args *CompleteMapJobArgs, reply *CompleteMa
 	log.Println("Received complete map job call")
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	storedJob, ok := c.TakenJobs[args.Id]
+	// handles the case where the job was already done by another worker
+	if !ok || storedJob.Type == "reduce" {
+		return nil
+	}
 	delete(c.TakenJobs, args.Id)
 	for id, newPaths := range args.FilePaths {
 		paths, present := c.ReduceFilePaths[id]
@@ -110,6 +115,11 @@ func (c *Coordinator) CompleteReduceJob(args *CompleteReduceJobArgs, reply *Comp
 	log.Println("Received complete reduce job call")
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	storedJob, ok := c.TakenJobs[args.Id]
+	// handles the case where the job was already done by another worker
+	if !ok || storedJob.Type == "map" {
+		return nil
+	}
 	delete(c.TakenJobs, args.Id)
 	return nil
 }
@@ -126,6 +136,7 @@ func (c *Coordinator) timeout(job *Job) {
 	if storedJob.Type != job.Type {
 		return
 	}
+	log.Printf("Timeout for %s job #%d ... assigning to new worker", job.Type, job.Id)
 	delete(c.TakenJobs, job.Id)
 	c.JobQueue = append(c.JobQueue, job)
 }

@@ -4,3 +4,4 @@ mock_fs/seq*int.txt
 mock_fs/m*.txt
 mock_fs/o*.txt
 mock_fs/all.txt
+done
