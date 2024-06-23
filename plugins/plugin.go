@@ -13,4 +13,5 @@ type Plugin interface {
 
 var Plugins map[string]Plugin = map[string]Plugin{
 	"wc": WordCount{},
+	"c":  Crash{},
 }

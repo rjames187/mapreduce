@@ -2,8 +2,8 @@ package plugins
 
 import (
 	"crypto/rand"
+	"log"
 	"math/big"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -14,10 +14,11 @@ type Crash struct{}
 func fault() {
 	num, _ := rand.Int(rand.Reader, big.NewInt(1000))
 	if num.Int64() < 330 {
-		os.Exit(1)
+		log.Fatal("Worker crashing ...")
 	} else if num.Int64() < 660 {
 		bigMS, _ := rand.Int(rand.Reader, big.NewInt(10000))
 		ms := bigMS.Int64() + 5000
+		log.Printf("Worker sleeping for %d ms", ms)
 		time.Sleep(time.Duration(ms) * time.Millisecond)
 	}
 }
