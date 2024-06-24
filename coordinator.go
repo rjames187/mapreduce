@@ -45,7 +45,7 @@ func (c *Coordinator) coordinate(dir string, addr string) {
 		duration, _ := time.ParseDuration("1s")
 		time.Sleep(duration)
 		c.mu.Lock()
-		if len(c.TakenJobs) == 0 {
+		if len(c.JobQueue) == 0 && len(c.TakenJobs) == 0 {
 			log.Println("All map jobs completed ...")
 			c.mu.Unlock()
 			break
@@ -61,7 +61,7 @@ func (c *Coordinator) coordinate(dir string, addr string) {
 		duration, _ := time.ParseDuration("1s")
 		time.Sleep(duration)
 		c.mu.Lock()
-		if len(c.TakenJobs) == 0 {
+		if len(c.JobQueue) == 0 && len(c.TakenJobs) == 0 {
 			log.Println("All reduce jobs completed ...")
 			break
 		}
@@ -83,6 +83,7 @@ func (c *Coordinator) RequestJob(args *RequestJobArgs, reply *RequestJobReply) e
 	job := c.JobQueue[0]
 	reply.Job = job
 	c.JobQueue = c.JobQueue[1:]
+	c.TakenJobs[job.Id] = job
 	go c.timeout(job)
 	return nil
 }
@@ -158,7 +159,6 @@ func (c *Coordinator) initMapJobs(dir string) {
 			Id: numJob,
 			NReduce: c.NReduce,
 		}
-		c.TakenJobs[numJob] = job
 		queue = append(queue, job)
 		numJob += 1
 		return nil
@@ -180,7 +180,6 @@ func (c *Coordinator) initReduceJobs() {
 			Type: "reduce",
 		}
 		c.JobQueue = append(c.JobQueue, job)
-		c.TakenJobs[j] = job
 	}
 }
 
