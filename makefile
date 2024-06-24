@@ -1,5 +1,8 @@
-test_wc: seq_wc
+test_wc: clean seq_wc
 	./tests/test-wc.sh
+
+test_fault: clean seq_wc
+	./tests/test-fault.sh
 
 seq_wc: build
 	./mapreduce -r sequential -d ./mock_fs/ -p wc > mock_fs/seq_wc_int.txt
