@@ -1,5 +1,13 @@
 # Distributed MapReduce Implementation
 
+## Table of Contents
+- [Getting Started](#getting-started)
+   * [Command-Line Interface](#command-line-interface)
+   * [Extending with Custom Map and Reduce Functions](#extending-with-custom-map-and-reduce-functions)
+- [What is MapReduce?](#what-is-mapreduce)
+- [What is this project?](#what-is-this-project)
+- [Acknowledgements](#acknowledgements)
+
 ## Getting Started
 
 1. Make sure Go is installed (this project uses 1.19)
